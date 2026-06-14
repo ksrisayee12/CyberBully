@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { alertApi } from "@/services/api";
+import { motion, AnimatePresence } from "framer-motion";
+import { alertApi, emergencyApi } from "@/services/api";
 import api from "@/services/api";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
-import { AlertTriangle, Mail } from "lucide-react";
+import { AlertTriangle, Mail, Download, ShieldAlert } from "lucide-react";
 
 export default function EmergencyPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -12,8 +13,8 @@ export default function EmergencyPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get("/emergency/reports"),
-      api.get("/emergency/email-logs"),
+      emergencyApi.reports(),
+      emergencyApi.emailLogs(),
     ]).then(([r, e]) => {
       setReports(r.data.data);
       setEmailLogs(e.data.data);
@@ -21,69 +22,114 @@ export default function EmergencyPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  const downloadPdf = async (id: number) => {
+    try {
+      const res = await emergencyApi.downloadPdf(id);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Emergency_Report_${id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Emergency Center</h1>
-        <p className="text-[hsl(var(--muted-foreground))] text-sm mt-1">Critical incident reports and email notifications</p>
-      </div>
+      <motion.div initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }}>
+        <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">Emergency Operations Center</h1>
+        <p className="text-[hsl(var(--muted-foreground))] text-sm mt-1.5 font-medium">Critical incident logs and automated external notifications</p>
+      </motion.div>
 
       {loading ? (
-        <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 rounded-xl bg-[hsl(var(--card))] animate-pulse" />)}</div>
+        <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 rounded-2xl glass-panel animate-pulse" />)}</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        >
           {/* Incident Reports */}
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-4 h-4 text-red-400" />
-              <h2 className="text-white font-semibold">Incident Reports</h2>
+          <div className="glass-panel rounded-2xl p-7 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 blur-3xl pointer-events-none rounded-full" />
+            <div className="flex items-center gap-3 mb-6 relative z-10">
+              <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                <ShieldAlert className="w-5 h-5 text-red-400" />
+              </div>
+              <h2 className="text-white font-bold text-xl drop-shadow-md">Generated Incident Reports</h2>
             </div>
+            
             {reports.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">No incidents recorded.</p>
+              <div className="text-center p-8 border border-white/5 rounded-xl bg-black/20">
+                <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">No high-risk incidents triggered generation.</p>
+              </div>
             ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {reports.map(r => (
-                  <div key={r.id} className="p-3 rounded-lg bg-[hsl(var(--muted))] border border-red-500/20">
-                    <div className="flex items-center justify-between mb-1">
-                      <SeverityBadge level={r.severity} />
-                      <span className="text-xs text-[hsl(var(--muted-foreground))]">{new Date(r.created_at).toLocaleString()}</span>
-                    </div>
-                    <p className="text-sm text-white mt-1">Risk Score: <span className="text-red-400 font-bold">{r.risk_score}/100</span></p>
-                    {r.report_data?.content_preview && (
-                      <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1 truncate">{r.report_data.content_preview}</p>
-                    )}
-                  </div>
-                ))}
+              <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 relative z-10">
+                <AnimatePresence>
+                  {reports.map((r, i) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                      key={r.id} className="p-5 rounded-xl bg-black/40 border border-white/5 shadow-inner hover:bg-black/60 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <SeverityBadge level={r.severity} />
+                        <div className="flex items-center gap-4">
+                          <span className="text-xs font-mono text-[hsl(var(--muted-foreground))]">{new Date(r.created_at).toLocaleString()}</span>
+                          <button onClick={() => downloadPdf(r.id)} className="text-cyan-400 hover:text-cyan-300 transition-colors p-1.5 rounded-md hover:bg-cyan-500/10" title="Download PDF Report">
+                            <Download className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-white font-bold tracking-wide">Threat Score: <span className="text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">{r.risk_score}/100</span></p>
+                      {r.report_data?.content_preview && (
+                        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-2 bg-white/[0.02] p-3 rounded-lg border border-white/[0.02] leading-relaxed line-clamp-2">{r.report_data.content_preview}</p>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>
 
           {/* Email Logs */}
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Mail className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-white font-semibold">Email Notifications</h2>
+          <div className="glass-panel rounded-2xl p-7 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-3xl pointer-events-none rounded-full" />
+            <div className="flex items-center gap-3 mb-6 relative z-10">
+              <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
+                <Mail className="w-5 h-5 text-cyan-400" />
+              </div>
+              <h2 className="text-white font-bold text-xl drop-shadow-md">Notification Dispatch Log</h2>
             </div>
+            
             {emailLogs.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">No emails sent yet.</p>
+              <div className="text-center p-8 border border-white/5 rounded-xl bg-black/20">
+                <p className="text-sm font-medium text-[hsl(var(--muted-foreground))]">No automated emails dispatched.</p>
+              </div>
             ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {emailLogs.map(l => (
-                  <div key={l.id} className="p-3 rounded-lg bg-[hsl(var(--muted))]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-white">{l.recipient}</span>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${l.status === "sent" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>{l.status}</span>
-                    </div>
-                    <div className="flex gap-3 text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                      <span>{l.incident_type}</span>
-                      <span>{new Date(l.sent_at).toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 relative z-10">
+                <AnimatePresence>
+                  {emailLogs.map((l, i) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                      key={l.id} className="p-4 rounded-xl bg-black/40 border border-white/5 shadow-inner"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-bold text-white drop-shadow-sm">{l.recipient}</span>
+                        <span className={`text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${l.status === "sent" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 glow-text-cyan" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>{l.status}</span>
+                      </div>
+                      <div className="flex gap-4 text-xs font-mono text-[hsl(var(--muted-foreground))]">
+                        <span className="text-cyan-400/80">{l.incident_type}</span>
+                        <span>{new Date(l.sent_at).toLocaleString()}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
     </div>
   );

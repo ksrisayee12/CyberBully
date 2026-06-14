@@ -31,6 +31,8 @@ export const monitorApi = {
   start: (data: any) => api.post("/monitor/start", data),
   stop: (data: any) => api.post("/monitor/stop", data),
   status: () => api.get("/monitor/status"),
+  ingest: (data: { text: string; author: string; content_type?: string }) =>
+    api.post("/monitor/ingest", data),
 };
 
 export const alertApi = {
@@ -42,11 +44,19 @@ export const analyticsApi = {
   overview: () => api.get("/analytics/overview"),
   trends: () => api.get("/analytics/trends"),
   offenders: () => api.get("/analytics/offenders"),
+  offenderDetail: (username: string) => api.get(`/analytics/offenders/${username}`),
 };
 
 export const conversationApi = {
   list: () => api.get("/conversations"),
   detail: (id: number) => api.get(`/conversations/${id}`),
+  intelligence: (id: number) => api.get(`/conversations/${id}/intelligence`),
+};
+
+export const emergencyApi = {
+  reports: () => api.get("/emergency/reports"),
+  emailLogs: () => api.get("/emergency/email-logs"),
+  downloadPdf: (id: number) => api.get(`/emergency/reports/${id}/pdf`, { responseType: 'blob' }),
 };
 
 export default api;

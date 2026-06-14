@@ -24,3 +24,20 @@ def email_logs(user: User = Depends(get_current_user), db: Session = Depends(get
         {"id": l.id, "recipient": l.recipient, "incident_type": l.incident_type, "status": l.status, "sent_at": l.sent_at}
         for l in logs
     ]}
+
+
+from fastapi.responses import Response
+from fastapi import HTTPException
+
+@router.get("/reports/{report_id}/pdf")
+def get_pdf(report_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    report = db.query(EmergencyReport).filter(EmergencyReport.id == report_id, EmergencyReport.user_id == user.id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    from app.services.emergency_service import generate_pdf_report
+    pdf_bytes = generate_pdf_report(report, user)
+    
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={
+        "Content-Disposition": f"attachment; filename=Emergency_Report_{report.id}.pdf"
+    })
