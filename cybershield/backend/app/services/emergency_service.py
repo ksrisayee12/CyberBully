@@ -100,3 +100,31 @@ def trigger_emergency(
     db.commit()
 
     return sent
+
+
+def generate_pdf_report(report: EmergencyReport, user: User) -> bytes:
+    from fpdf import FPDF
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.cell(200, 10, text="CyberShield AI Emergency Report", ln=1, align="C")
+    
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(200, 10, text=f"Date: {report.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}", ln=1)
+    pdf.cell(200, 10, text=f"Monitored User: {user.name}", ln=1)
+    pdf.cell(200, 10, text=f"Risk Score: {report.risk_score}/100", ln=1)
+    pdf.cell(200, 10, text=f"Severity: {report.severity}", ln=1)
+    
+    pdf.ln(10)
+    pdf.set_font("Helvetica", style="B", size=12)
+    pdf.cell(200, 10, text="Incident Details:", ln=1)
+    
+    pdf.set_font("Helvetica", size=10)
+    data = report.report_data or {}
+    pdf.multi_cell(0, 10, text=f"Type: {data.get('incident_type', 'critical_content')}")
+    pdf.multi_cell(0, 10, text=f"Content Preview: {data.get('content_preview', 'N/A')}")
+    
+    return bytes(pdf.output())

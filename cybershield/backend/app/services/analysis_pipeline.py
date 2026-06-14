@@ -4,7 +4,8 @@ Called after collector stores content.
 Runs: moderation → severity → violation tracking → emergency trigger
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, date
+from collections import defaultdict
 from sqlalchemy.orm import Session
 from app.services.moderation_service import classify_text
 from app.services.severity_service import calculate_severity, is_critical, is_threat_category
@@ -133,3 +134,76 @@ def get_offender_level(violation_count: int) -> str:
     elif violation_count <= 10:
         return "High"
     return "Critical"
+
+# Severity weighting used for offender score calculation
+_SEVERITY_WEIGHTS = {"Safe": 0, "Moderate": 1, "High": 2, "Critical": 3}
+
+
+def calculate_offender_score(violations: list) -> float:
+    """
+    Weighted 0-100 score based on severity of an offender's violation history.
+    Higher severity violations contribute more than repeated low-severity ones.
+    """
+    if not violations:
+        return 0.0
+    total_weight = sum(_SEVERITY_WEIGHTS.get(v.severity, 0) for v in violations)
+    score = min(total_weight * 5, 100)
+    return float(score)
+
+
+def get_risk_trend(violations: list) -> str:
+    """
+    Compares violation frequency in the last 7 days vs. the prior period
+    to flag whether an offender's behavior is escalating, easing, or stable.
+    """
+    if len(violations) < 2:
+        return "stable"
+
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    recent = sum(1 for v in violations if v.created_at and v.created_at >= cutoff)
+    older = len(violations) - recent
+
+    if recent > older:
+        return "increasing"
+    elif recent < older:
+        return "decreasing"
+    return "stable"
+
+
+def get_daily_violations_trend(db: Session, days: int = 14) -> list:
+    """
+    Returns a day-by-day violation count for the last `days` days.
+    Zero-fills days with no violations so the frontend always has a
+    contiguous series: [{"date": "2026-06-01", "count": 5}, ...]
+    """
+    from app.models.moderation import Violation
+    from sqlalchemy import func, cast
+    import sqlalchemy.types as types
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    rows = (
+        db.query(
+            func.date(Violation.created_at).label("day"),
+            func.count(Violation.id).label("count"),
+        )
+        .filter(Violation.created_at >= cutoff)
+        .group_by(func.date(Violation.created_at))
+        .all()
+    )
+
+    # Build a dict keyed by date string
+    counts: dict = defaultdict(int)
+    for row in rows:
+        # func.date() returns a string in SQLite, date object in Postgres
+        day_str = str(row.day)[:10]  # normalise to YYYY-MM-DD
+        counts[day_str] = row.count
+
+    # Generate a zero-filled contiguous series
+    result = []
+    for i in range(days - 1, -1, -1):
+        day = (datetime.utcnow() - timedelta(days=i)).date()
+        day_str = day.isoformat()
+        result.append({"date": day_str, "count": counts.get(day_str, 0)})
+
+    return result
